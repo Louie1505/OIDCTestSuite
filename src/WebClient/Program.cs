@@ -1,5 +1,7 @@
+using Library;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.IdentityModel.Tokens.Jwt;
-using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,26 +10,28 @@ builder.Services.AddRazorPages();
 
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = "Cookies";
-        options.DefaultChallengeScheme = "oidc";
-    })
-    .AddCookie("Cookies")
-    .AddOpenIdConnect("oidc", options =>
-    {
-        options.Authority = "https://localhost:7285";
+var settings = builder.Configuration.GetSection(nameof(OIDCConfiguration)).Get<OIDCConfiguration>();
 
-        options.ClientId = "cmapclient";
-        options.ClientSecret = "secret";
-        options.ResponseType = "code";
+builder.Services.AddAuthentication(options => {
+    options.DefaultScheme = "Cookies";
+    options.DefaultChallengeScheme = "oidc";
+})
+    .AddCookie("Cookies")
+    .AddOpenIdConnect("oidc", options => {
+        options.Authority = settings.Authority;
+
+        options.ClientId = settings.ClientId;
+        options.ClientSecret = settings.ClientSecret;
+        options.ResponseType = settings.ResponseType ?? OpenIdConnectResponseType.IdToken;
 
         options.SaveTokens = true;
 
         options.Scope.Clear();
-        options.Scope.Add("openid");
-        options.Scope.Add("profile");
-        options.Scope.Add("offline_access");
+        if (settings.Scope is not null) {
+            foreach (string s in settings.Scope) {
+                options.Scope.Add(s);
+            }
+        }
 
         options.GetClaimsFromUserInfoEndpoint = true;
     });
@@ -35,8 +39,7 @@ builder.Services.AddAuthentication(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
+if (!app.Environment.IsDevelopment()) {
     app.UseExceptionHandler("/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
